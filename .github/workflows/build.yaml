@@ -1,0 +1,41 @@
+name: Build and Test App
+
+on:
+  push: 
+    branches: [ "*" ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker Image
+      run: docker build . --file Dockerfile
+     
+    - name: Log in to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: mdoregistry.azurecr.io
+        username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+        password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+      
+    - name: Build Docker Image
+      run: docker build -t mdoregistry.azurecr.io/mdo-users:$(git rev-parse --short "$GITHUB_SHA") .        
+        
+    - name: Push Docker image to Azure Container Registry
+      run:  docker push mdoregistry.azurecr.io/mdo-users:$(git rev-parse --short "$GITHUB_SHA")
+
+    - name: Log in to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Deploy to Azure Functions
+      uses: Azure/functions-action@v1
+      with:
+        app-name: mdo-posts
+        image: mdoregistry.azurecr.io/mdo-users:$(git rev-parse --short "$GITHUB_SHA")
+        package: .
+    
